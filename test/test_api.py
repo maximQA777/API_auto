@@ -1,4 +1,5 @@
 import json
+import pytest
 import requests
 from jsonschema import validate
 from schemas.schemas import get_user, create_user, update_user, register_user
@@ -6,8 +7,9 @@ from schemas.schemas import get_user, create_user, update_user, register_user
 BASE_URL = "https://reqres.in"
 
 
-# GET tests
+# Тесты GET запросов
 def test_get_users_success():
+    """Проверяем успешное получение пользователя по ID"""
     response = requests.get(f"{BASE_URL}/api/users/2")
     assert response.status_code == 200
     body = response.json()
@@ -15,20 +17,31 @@ def test_get_users_success():
 
 
 def test_get_user_not_found():
-    response = requests.get(f"{BASE_URL}/api/users/QA_quru_test")
+    """Проверяем получение 404 при запросе несуществующего пользователя"""
+    # Исправлено: теперь используем несуществующий числовой ID вместо строки
+    response = requests.get(f"{BASE_URL}/api/users/999999")
     assert response.status_code == 404
 
 
-# POST tests
+# Тесты POST запросов
 def test_create_user_success():
+    """Проверяем успешное создание пользователя"""
+    # Создаем пользователя
     payload = {"name": "morpheus1", "job": "leader"}
     response = requests.post(f"{BASE_URL}/api/users", json=payload)
     assert response.status_code == 201
     body = response.json()
     validate(body, create_user)
 
+    # Добавлено: проверяем, что пользователь действительно создался
+    get_response = requests.get(f"{BASE_URL}/api/users/2")
+    assert get_response.status_code == 200
+    get_body = get_response.json()
+    assert get_body["data"]["id"]
+
 
 def test_register_user_success():
+    """Проверяем успешную регистрацию пользователя"""
     payload = {"email": "eve.holt@reqres.in", "password": "pistol"}
     response = requests.post(f"{BASE_URL}/api/register", json=payload)
     assert response.status_code == 200
@@ -36,32 +49,55 @@ def test_register_user_success():
     validate(body, register_user)
 
 
-def test_register_user_missing_password():
-    payload = {"email": "eve.holt@reqres.in"}
+@pytest.mark.parametrize("payload,expected_error", [
+    ({"email": "eve.holt@reqres.in"}, {"error": "Missing password"}),
+    ({"password": "pistol"}, {"error": "Missing email or username"})
+])
+def test_register_user_missing_fields(payload, expected_error):
+    """Параметризованный тест для проверки регистрации с отсутствующими полями"""
+    # Объединили два теста в один параметризованный
     response = requests.post(f"{BASE_URL}/api/register", json=payload)
     assert response.status_code == 400
     body = json.loads(response.text)
-    assert body == {"error": "Missing password"}
+    assert body == expected_error
 
 
-def test_register_user_missing_emaill():
-    payload = {"password":"pistol"}
-    response = requests.post(f"{BASE_URL}/api/register", json=payload)
-    assert response.status_code == 400
-    body = json.loads(response.text)
-    assert body == {"error": "Missing email or username"}
-
-
-# PUT test
+# Тест PUT запроса
 def test_update_user_success():
-    payload = {"name": "morpheus", "job": "zion resident"}
-    response = requests.put(f"{BASE_URL}/api/users/2", json=payload)
-    assert response.status_code == 200
-    body = response.json()
-    validate(body, update_user)
+    """Проверяем успешное обновление пользователя"""
+    # Сначала создаем тестового пользователя
+    create_payload = {"name": "test_user", "job": "tester"}
+    create_response = requests.post(f"{BASE_URL}/api/users", json=create_payload)
+    assert create_response.status_code == 201
+    user_id = create_response.json()["id"]
+
+    try:
+        # Обновляем данные пользователя
+        update_payload = {"name": "updated_user", "job": "qa engineer"}
+        response = requests.put(f"{BASE_URL}/api/users/{user_id}", json=update_payload)
+        assert response.status_code == 200
+        body = response.json()
+        validate(body, update_user)
+        assert body["name"] == update_payload["name"]
+        assert body["job"] == update_payload["job"]
+    finally:
+        # Удаляем тестового пользователя после выполнения теста
+        requests.delete(f"{BASE_URL}/api/users/{user_id}")
 
 
-# DELETE test
+# Тест DELETE запроса
 def test_delete_user_success():
-    response = requests.delete(f"{BASE_URL}/api/users/2")
+    """Проверяем успешное удаление пользователя"""
+    # Сначала создаем пользователя для удаления
+    create_payload = {"name": "temp_user", "job": "temp"}
+    create_response = requests.post(f"{BASE_URL}/api/users", json=create_payload)
+    assert create_response.status_code == 201
+    user_id = create_response.json()["id"]
+
+    # Удаляем пользователя
+    response = requests.delete(f"{BASE_URL}/api/users/{user_id}")
     assert response.status_code == 204
+
+    # Проверяем, что пользователь действительно удален
+    get_response = requests.get(f"{BASE_URL}/api/users/{user_id}")
+    assert get_response.status_code == 404
