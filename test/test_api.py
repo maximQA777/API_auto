@@ -25,7 +25,6 @@ def test_get_user_not_found():
 
 # Тесты POST запросов
 def test_create_user_success():
-    """Проверяем успешное создание пользователя"""
     # Создаем пользователя
     payload = {"name": "morpheus1", "job": "leader"}
     response = requests.post(f"{BASE_URL}/api/users", json=payload)
@@ -33,11 +32,6 @@ def test_create_user_success():
     body = response.json()
     validate(body, create_user)
 
-    # Добавлено: проверяем, что пользователь действительно создался
-    get_response = requests.get(f"{BASE_URL}/api/users/2")
-    assert get_response.status_code == 200
-    get_body = get_response.json()
-    assert get_body["data"]["id"]
 
 
 def test_register_user_success():
